@@ -1,0 +1,411 @@
+---
+title: "HarvardX - Data Science: Capstone Course - Blood Transfusion Service Center Project"
+author: "James Melanson"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: 
+    number_sections: yes
+    fig_caption: yes
+  html_document:
+    df_print: paged
+editor_options:
+  chunk_output_type: console
+---
+\newpage
+\tableofcontents
+\newpage
+
+```{r setup, include=FALSE}
+if(!require(caret)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+if(!require(tidyverse)) install.packages("tidyverse", repos = "http://cran.us.r-project.org")
+
+library(caret)
+library(tidyverse)
+```
+
+```{r Download, load, and partition data set, echo = FALSE, warning = FALSE}
+dl <- tempfile()
+download.file("https://archive.ics.uci.edu/ml/machine-learning-databases/blood-transfusion/transfusion.data", dl)
+data <- read.csv(dl) %>% 
+  rename("Time since last donation (months)" = "Recency..months.") %>%
+  rename("Total number of blood donations" = "Frequency..times.") %>%
+  rename("Amount of blood donated (mL)" = "Monetary..c.c..blood.") %>%
+  rename("Time since first donation (months)" = "Time..months.") %>%
+  rename("Donated Blood in March 2007?" = "whether.he.she.donated.blood.in.March.2007")
+
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(data$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+training <- data[-test_index,] %>% select(-`Amount of blood donated (mL)`)
+validation <- data[test_index,] %>% select(-`Amount of blood donated (mL)`)
+
+
+test_index <- createDataPartition(training$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+train <- training[-test_index,]
+test_set <- training[test_index,]
+rm(test_index)
+
+#Training dataset without "Amount of blood donated (mL)" filtered out
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(data$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+training1 <- data[-test_index,]
+
+test_index <- createDataPartition(training1$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+train1 <- training1[-test_index,]
+rm(test_index)
+```
+
+# Introduction
+## Purpose
+Marketing departments do not have unlimited budgets to attract sales. Further, certain customers are more likely to convert into a sale based on information that a business already possesses. The Recency, Frequency, and Monetary Value model allows a business to target customers based on how recently a customer made a purchase, how often they purchase, and how much they generally spend. However, can this approach be used to predict repeated engagement with blood donation services?
+
+The aim of this project is to produce a machine learning-based model to predict whether a blood donor donated blood to the Blood Transfusion Service Center in Hsinchu, Taiwan in March 2007. Models were characterized by comparing their predictions of donation status to true donation statuses contained in a hold-out test set, and computing indicators of accuracy.
+
+## Dataset
+The Blood Transfusion Service Center (BTSC) data set contains information related to blood donation at the BTSC in Hsinchu, Taiwan. Donated to the University of California, Irvine (UCI) Machine Learning Repository in October 2008, the BTSC data set contains data from `r dim(data)[1]` blood donors.
+
+This data set contains one data-containing file, "transfusion.data', which contains  and a file containing a description of the data set, "transfusion.names".
+
+### Transfusion.data File Structure
+The transfusion.data file contains information related to individuals who donated blood to the BTSC in Hsinchu, Taiwan. There are `r dim(data)[1]` donors within the data set and four variables that may be used for predicting the outcome of whether a donor donated blood in March 2007.
+
+The predictor variables include:
+
+- Recency (months), the number of months since a donor's last blood donation
+- Frequency (times), the total number of blood donations a donor has given
+- Monetary (c.c. blood), the total amount of blood donated in cm^3^
+- Time (months), the number of months since a donor's first blood donation
+
+
+The outcome variable includes the following variable:
+
+- Whether he/she donated blood in March 2007, which is self-explanatory
+
+### Transfusion.names File Structure
+The Transfusion.names file was included with the data set downloaded from the UCI Machine Learning Repository and serves as metadata. Included within the file, are the following characteristics of the data set:
+
+- number of records
+- number of attributes
+- economic sector the data set is taken from
+- data set source and owner
+- general description of the data set
+- attribute information
+- citation information
+
+## Goal of the project
+The goal of this project was to produce a machine learning based model to predict whether a blood donor that previously donated to the BTSC would donate again in March 2007. As part of this project, I trained machine learning algorithms on a portion of the BTSC dataset to create a prediction system. The model with the highest F1 score during training, excluding the regression-based approach, was validated on a test set that was held out during algorithm development.
+
+The algorithms that were developed during this project predict whether a blood donor donated again in March 2007 using blood donation data from other users. Model performance was measured by comparing their predictions of whether a donor donated blood in March 2007 to whether a particular donor actually donated blood in March 2007; using the root mean squared error (RMSE), accuracy, and F1 score.
+
+## Key steps that were performed
+Key steps that were performed as part of this analysis include:
+
+1. Data retrieval from the UCI Machine Learning Repository from the following link: <https://archive.ics.uci.edu/ml/machine-learning-databases/blood-transfusion/transfusion.data>
+2. Renaming of columns for improved interpretability
+3. Partitioning the data into a training set, `training`, and a hold-out test set, `validation`, to test the accuracy of the final model
+3. Partitioning the training set `training` into two subsets: a training set, `train`, and a test set, `test_set`, to test the accuracy of algorithms during model development
+4. Development of machine learning-based algorithms using the RMSE, accuracy, and F1 score as metrics to compare the performance of different models
+
+\newpage
+# Methods
+## Data Retrieval
+The data used for this analysis was retrieved using R from the UCI Machine Learning Repository at <https://archive.ics.uci.edu/ml/machine-learning-databases/blood-transfusion/transfusion.data>. A temporary file name was created using the `tempfile` function and the `download.file` function was used to download the transfusion.data file to the file name created with `tempfile`.
+
+The transfusion.data file was inspected using Windows Notepad as the .data file extension was not recognized as having a particular file structure. Upon file inspection in Windows Notepad, transfusion.data was recognized as being a comma-separated value file. Thus, transfusion.data was read into R using the `read.csv` function using default settings.
+
+## Data Cleaning
+The transfusion.data file did not require extensive cleaning. The transfusion.data file was read into R using the `read.csv` function with default settings to produce a data set wherein each row represented an observation and each column represented a variable. Further, there was no missing data within the data set.
+
+Columns in the data set were renamed to improve interpretability and efficiency in writing concise code, as follows (new name = old name):
+
+- Time since last donation (months) = Recency..months.
+- Total number of blood donations = Frequency..times.
+- Amount of blood donated (mL) = Monetary..c.c..blood.
+- Time since first donation (months) = Time..months.
+- Donated Blood in March 2007? = whether.he.she.donated.blood.in.March.2007
+
+## Partitioning of the Blood Transfusion Service Center's Data into Training and Validation Sets
+The `caret` package was used to partition the BSTC data into training and validation sets. The training set, `training`, consisted of 90% of the transfusion.data file and was used to train machine learning-based algorithms to predict whether a blood donor donated blood in March 2007. The validation set, `validation`, consisted of 10% of the transfusion.data file and was used to test the accuracy of the final model.
+
+A 90%/10% split of the BTSC data was performed due to the relatively low number of observations compared to other data sets which use machine learning. Further, the low prevalence of blood donors who donated again in March 2007 was low compared to the number of donors who did not donate again in March 2007.
+
+## Root mean squared error (RMSE)
+The RMSE was defined as follows:
+
+$$RMSE = \sqrt{\frac{1}{N}\sum_{i=1}^{n}(\hat{y}_i-y_i)^2}$$
+
+where:
+
+- N = number of observations
+- $\hat{y}$ = machine learning algorithm's prediction of whether a donor donated blood in March 2007
+- $y$ = the true status of whether a donor donated blood in March 2007
+
+## Accuracy
+The accuracy was defined as follows:
+
+$$Accuracy = mean(\hat{y} = y)$$
+
+where:
+
+- $\hat{y}$ = machine learning algorithm's prediction of whether a donor donated blood in March 2007
+- $y$ = the true status of whether a donor donated blood in March 2007
+
+## F1 score
+The F1 score was defined as follows:
+
+$$F_1 = {\frac{1}{\frac{1}{2}(\frac{1}{recall}+\frac{1}{precision})}}$$
+
+where:
+
+$$recall = \frac{TruePositives}{TruePositives+False Negatives}$$
+
+$$precision = \frac{TruePositives}{TruePositives+FalsePositives}$$
+
+\newpage
+## Exploratory Data Analysis
+### Training Data Set
+The `training` data set consists of observations from `r dim(training)[1]` donors who donated blood to the BTSC in Hsinchu, Taiwan.
+
+```{r Time since last donation histogram, echo = FALSE, fig.cap = "Histogram of Time Since Last Blood Donation - Training Set", message = FALSE}
+training %>% ggplot(aes(x = `Time since last donation (months)`)) +
+  geom_histogram() +
+  ylab("Count")
+```
+
+```{r Training set summary statistics - Time since last donation, echo = FALSE}
+training %>%
+  summarize(Mean = mean(`Time since last donation (months)`),
+            Median = median(`Time since last donation (months)`),
+            Min = min(`Time since last donation (months)`),
+            Max = max(`Time since last donation (months)`),
+            Range = max(`Time since last donation (months)`) - min(`Time since last donation (months)`)) %>%
+  knitr::kable(format.args = list(big.mark = ","), caption = "Summary Statistics of \"Time Since Last Donation (months)\" in the Training Data Set")
+
+```
+
+```{r Total number of blood donations histogram, echo = FALSE, fig.cap = "Histogram of Total Number of Blood Donations - Training Set", message = FALSE}
+training %>% ggplot(aes(x = `Total number of blood donations`)) +
+  geom_histogram() +
+  ylab("Count")
+```
+
+```{r Training set summary statistics - Total number of blood donations, echo = FALSE}
+training %>%
+  summarize(Mean = mean(`Total number of blood donations`),
+            Median = median(`Total number of blood donations`),
+            Min = min(`Total number of blood donations`),
+            Max = max(`Total number of blood donations`),
+            Range = max(`Total number of blood donations`) - min(`Total number of blood donations`)) %>%
+  knitr::kable(format.args = list(big.mark = ","), caption = "Summary Statistics of \"Total Number of Blood Donations\" in the Training Data Set")
+```
+
+```{r Time since first donation histogram, echo = FALSE, fig.cap = "Histogram of Time Since First Blood Donation - Training Set", message = FALSE}
+training %>% ggplot(aes(x = `Time since first donation (months)`)) +
+  geom_histogram() +
+  ylab("Count")
+```
+
+```{r Training set summary statistics - Time since first donation, echo = FALSE}
+training %>%
+  summarize(Mean = mean(`Time since first donation (months)`),
+            Median = median(`Time since first donation (months)`),
+            Min = min(`Time since first donation (months)`),
+            Max = max(`Time since first donation (months)`),
+            Range = max(`Time since first donation (months)`) - min(`Time since first donation (months)`)) %>%
+  knitr::kable(format.args = list(big.mark = ","), caption = "Summary Statistics of \"Time Since First Donation (months)\" in the Training Data Set")
+```
+
+```{r Training set summary statistics - Donated blood in March 2007, echo = FALSE}
+train %>%
+  group_by(`Donated Blood in March 2007?`) %>%
+  summarize(n()) %>%
+  rename("n" = `n()`) %>%
+  knitr::kable(format.args = list(big.mark = ","), caption = "Summary Statistics of Blood Donation Status in March 2007 in the Training Data Set")
+```
+
+```{r Load and partition data set keeping amount of blood donated, echo = FALSE, warning = FALSE}
+set.seed(1, sample.kind = "Rounding")
+test_index <- createDataPartition(data$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+training1 <- data[-test_index,]
+
+test_index <- createDataPartition(training1$`Donated Blood`, times = 1, p = 0.1, list = FALSE)
+train1 <- training1[-test_index,]
+rm(test_index)
+```
+
+```{r Total number of blood donations versus amount of blood donated graph, echo = FALSE, fig.cap = "Total number of blood donations versus Amount of blood donated (mL)"}
+train1 %>%
+  ggplot(aes(x = `Amount of blood donated (mL)`, y = `Total number of blood donations`)) + geom_point()
+```
+
+Due to the collinearity between the "Total number of blood donations" and "Amount of blood donated" variables, the "Amount of blood donated" variable was excluded from further analysis.
+
+### Validation Data Set
+The `validation` data set consists of `r dim(validation)[1]` observations of whether a donor donated blood in March 2007. Further exploration of this data was not performed so as to preserve the utility of this data as a hold-out test set.
+
+## Modelling Approaches
+### Model 1: Flip a coin
+```{r Model 1, echo = FALSE}
+yhat <- sample(c(0,1), length(test_set$`Donated Blood in March 2007?`), replace = TRUE)
+
+model1_accuracy <- mean(yhat == test_set$`Donated Blood in March 2007?`)
+model1_rmse <- RMSE(yhat, test_set$`Donated Blood in March 2007?`)
+model1_F1 <- F_meas(as.factor(yhat), reference = as.factor(test_set$`Donated Blood in March 2007?`))
+```
+
+This model does not use any of the information contained within the BTSC dataset, and simply guesses whether a donor donated in March 2007. This was done by sampling from a population of 1s and 0s with a 50% probability of selecting either number; with 1 corresponding to the person having donated blood in March 2007, and 0 corresponding to a person not donating blood in March 2007.
+
+This would not be a candidate for a final model in predicting blood donation status in the `validation` data set. However, it is useful as a baseline measure for comparing different algorithms' accuracies.
+
+### Model 2: Logistic regression
+```{r Model 2, echo = FALSE}
+fit_glm <- glm(`Donated Blood in March 2007?` ~ ., data = train, family = "binomial")
+p_hat_glm <- predict(fit_glm, test_set, type = "response")
+y_hat_glm <- ifelse(p_hat_glm > 0.5, "1", "0") %>% factor(levels = levels(as.factor(test_set$`Donated Blood in March 2007?`)))
+
+model2_accuracy <- confusionMatrix(y_hat_glm, as.factor(test_set$`Donated Blood in March 2007?`))$overall[["Accuracy"]]
+model2_rmse <- RMSE(as.numeric(y_hat_glm), as.numeric(test_set$`Donated Blood in March 2007?`))
+model2_F1 <- F_meas(y_hat_glm, reference = as.factor(test_set$`Donated Blood in March 2007?`))
+```
+This model uses regression to determine the following probability:
+
+$$Pr(Y = 1 | X_1 = x_1, X_2 = x_2, X_3 = x_3) = \beta_0 + \beta_1x_1 + \beta_2x_2 + \beta_3x_3$$
+
+where:
+
+- $Y$ is the status of whether an individual donated blood in March 2007, with 1 corresponding to a donor having donated and 0 corresponding to a donor not having donated
+- $X$ is a predictor
+- $x$ is the value of a particular predictor
+
+Predictions are made by this model by determining if the probability of a donor having donated, given the values of the predictors, is greater than 0.5. If the probability of having donated according to the logistic model is greater than 0.5, it will predict that the donor donated blood in March 2007.
+
+### Model 3: k-Nearest Neighbours
+This model uses the "k-Nearest Neighbours" algorithm to generate outcome predictions for the `test_set` dataset. This model queries the blood donation status of the `k` nearest points to a test point and assigns an outcome status based on majority rule. The parameter `k` was varied during model development to empirically determine its optimal value.
+```{r Model 3, echo = FALSE, warning = FALSE}
+train_knn <- train(as.factor(`Donated Blood in March 2007?`) ~ ., method = "knn", data = train, tuneGrid = data.frame(k = seq(5,100,2)))
+y_hat_knn <- predict(train_knn, test_set, type = "raw")
+
+model3_accuracy <- confusionMatrix(y_hat_knn, as.factor(test_set$`Donated Blood in March 2007?`))$overall["Accuracy"]
+model3_rmse <- RMSE(as.numeric(y_hat_knn), test_set$`Donated Blood in March 2007?`)
+model3_F1 <- F_meas(predict(train_knn, test_set, type = "raw"), reference = as.factor(test_set$`Donated Blood in March 2007?`))       
+```
+
+### Model 4: Random Forest
+This model uses the "Random Forest" algorithm to generate outcome predictions for the `test_set` data set. 
+
+To generate outcome value predictions:
+
+1. A bootstrap sample containing `r dim(train)[1]` observations is generated by sampling with replacement from the `train` dataset and randomly selecting `x` predictors
+2. A decision tree is generated and outcome value is predicted
+3. Steps 1 and 2 are repeated for a total of 25 trees
+4. The average prediction for a particular `test_set` observation across all trees is taken as the final prediction 
+
+> Note: `x` is a tunable parameter whose value can be varied during model development to empirically determine an optimal value with respect to model accuracy
+
+```{r Model 4, echo = FALSE, warning = FALSE}
+train_rf <- train(as.factor(`Donated Blood in March 2007?`) ~ ., method = "rf", data = train, tuneGrid = data.frame(mtry = c(2,3,4)))
+y_hat_rf <- predict(train_rf, test_set, type = "raw")
+  
+model4_accuracy <- confusionMatrix(y_hat_rf, as.factor(test_set$`Donated Blood in March 2007?`))$overall["Accuracy"]
+model4_rmse <- RMSE(as.numeric(y_hat_rf), as.numeric(test_set$`Donated Blood in March 2007?`))
+model4_F1 <- F_meas(predict(train_rf, test_set, type = "raw"), reference = as.factor(test_set$`Donated Blood in March 2007?`)) 
+```
+
+### Model 5: Ensemble of k-Nearest Neighbours and Random Forest
+This model uses both the "k-Nearest Neighbours" and "Random Forest" algorithms to generate outcome predictions for the `test_set` data set. To generate a prediction of whether a donor donated blood in March 2007, the probability for a particular outcome status was calculated with each algorithm separately and then these two probabilities were averaged. If the averaged probability was greater than 0.5, this model predicts that the donor donated blood in March 2007.
+
+```{r Model 5, echo = FALSE}
+p_hat_knn <- predict(train_knn, test_set, type = "prob")
+p_hat_rf <- predict(train_rf, test_set, type = "prob")
+p_hat_knn_rf <- (p_hat_knn + p_hat_rf)/2
+y_hat_knn_rf <- factor(apply(p_hat_knn_rf, 1, which.max)-1)
+
+model5_accuracy <- confusionMatrix(y_hat_knn_rf, as.factor(test_set$`Donated Blood in March 2007?`))$overall["Accuracy"]
+model5_rmse <- RMSE(as.numeric(y_hat_knn_rf), as.numeric(test_set$`Donated Blood in March 2007?`))
+model5_F1 <- F_meas(y_hat_knn_rf, reference = as.factor(test_set$`Donated Blood in March 2007?`))       
+```
+
+\newpage
+# Results
+## Model 1: Flip a coin
+In Model 1, predictions of whether a blood donor donated blood to the BTSC in March 2007 were generated by flipping a coin. The RMSE of Model 1 was `r model1_rmse`. Further, the accuracy and F1 score were `r model1_accuracy` and `r model1_F1`, respectively.
+```{r Model 1 results, echo = FALSE}
+rmse_results1 <- tibble("Model" = "1: Flip a coin", "RMSE" = model1_rmse, "Accuracy" = model1_accuracy, "F1 score" = model1_F1)
+rmse_results1 %>% knitr::kable()
+```
+
+## Model 2: Logistic regression
+In Model 2, logistic regression was performed using three of the predictors present in the BTSC data set to produce predictions on the outcome variable: whether a donor donated blood to the BTSC in March 2007. The RMSE of Model 2 was `r model2_rmse`. Further, the accuracy and F1 score were `r model2_accuracy` and `r model2_F1`, respectively.
+```{r Model 2 results, echo = FALSE}
+rmse_results2 <- tibble("Model" = "2: Logistic Regression", "RMSE" = model2_rmse, "Accuracy" = model2_accuracy, "F1 score" = model2_F1)
+rbind(rmse_results1, rmse_results2) %>% knitr::kable()
+```
+
+## Model 3: k-Nearest Neighbours
+Model 3 utilized the "k-Nearest Neighbours" algorithm to generate predictions of whether a donor donated blood to the BTSC in March 2007. The RMSE of Model 3 was `r model3_rmse`. Further, the accuracy and F1 score were `r model3_accuracy` and `r model3_F1`, respectively.
+```{r Model 3 results, echo = FALSE}
+rmse_results3 <- tibble("Model" = "3: k-Nearest Neighbours", "RMSE" = model3_rmse, "Accuracy" = model3_accuracy, "F1 score" = model3_F1)
+rbind(rmse_results1, rmse_results2, rmse_results3) %>% knitr::kable()
+```
+
+```{r kNN accuracy versus k graph, echo = FALSE, fig.cap = "Model 3 - Accuracy on training set \"train\" versus Number of Nearest Neighbours k"}
+qplot(x = train_knn$results$k, y = train_knn$results$Accuracy) +
+  xlab("Number of Nearest Neighbours k") +
+  ylab("Accuracy on training set \"train\"") +
+  scale_x_continuous(limits = c(0,NA))
+```
+
+## Model 4: Random Forest
+Model 4 utilized the "Random Forest" algorithm to generate predictions of whether a blood donor donated blood to the BTSC in March 2007. The RMSE of Model 4 was `r model4_rmse`. Further, the accuracy and F1 score were `r model4_accuracy` and `r model4_F1`, respectively.
+```{r Model 4 results, echo = FALSE}
+rmse_results4 <- tibble("Model" = "4: Random Forest", "RMSE" = model4_rmse, "Accuracy" = model4_accuracy, "F1 score" = model4_F1)
+rbind(rmse_results1, rmse_results2, rmse_results3, rmse_results4) %>% knitr::kable()
+```
+
+```{r Random forest accuracy versus number of randomly-selected predictors graph, echo = FALSE, fig.cap = "Model 4 - Accuracy (Bootstrap) versus Number of Randomly Selected Predictors"}
+qplot(x = train_rf$results$mtry, y = train_rf$results$Accuracy) +
+  xlab("Number of Randomly Selected Predictors") +
+  ylab("Accuracy (Bootstrap)") +
+  scale_x_continuous(limits = c(0, NA))
+```
+
+## Model 5: Ensemble of k-Nearest Neighbours and Random Forest
+Model 5 used both the "k-Nearest Neighbours" and "Random Forest" algorithms to generate predictions on whether a donor donated blood to the BTSC in March 2007. The RMSE of Model 5 was `r model5_rmse`. Further, the accuracy and F1 score were `r model5_accuracy` and `r model5_F1`, respectively.
+```{r Model 5 results, echo = FALSE}
+rmse_results5 <- tibble("Model" = "5: Ensemble of kNN and Random Forest", "RMSE" = model5_rmse, "Accuracy" = model5_accuracy, "F1 score" = model5_F1)
+rbind(rmse_results1, rmse_results2, rmse_results3, rmse_results4, rmse_results5) %>% knitr::kable()
+```
+
+## Validation of the final model's accuracy against the hold-out test set
+```{r Model 3 validation, echo = FALSE}
+y_hat_knn_validation <- predict(train_knn, validation, type = "raw")
+
+validation_accuracy <- confusionMatrix(y_hat_knn_validation, as.factor(validation$`Donated Blood in March 2007?`))$overall["Accuracy"]
+validation_rmse <- RMSE(as.numeric(y_hat_knn_validation), validation$`Donated Blood in March 2007?`)
+validation_F1 <- F_meas(y_hat_knn_validation, reference = as.factor(validation$`Donated Blood in March 2007?`))
+```
+Validation of the final model, Model 3, was performed on the hold-out test set `validation`. Model 3 was chosen as the final model as it had the highest F1 score out of the models that went beyond logistic regression. The RMSE of Model 3 with respect to the `validation` test set was `r validation_rmse`. Further, the accuracy and F1 score were `r validation_accuracy` and `r validation_F1`, respectively.
+
+```{r Model 3 validation results, echo = FALSE}
+rmse_results_validation <- tibble("Model" = "Validation using hold-out test set `validation`", "RMSE" = validation_rmse, "Accuracy" = validation_accuracy, "F1 score" = validation_F1)
+rbind(rmse_results3, rmse_results_validation) %>% knitr::kable()
+```
+
+\newpage
+# Conclusion
+The aim of this project was to develop a machine learning-based model that could predict whether a blood donor donated blood to the BTSC in March 2007; using the time since last donation in months, time since first donation in months, and total number of blood donations as predictors. The final model that was developed utilized a k-Nearest Neighbours algorithm and achieved an accuracy and F1 score of `r validation_accuracy` and `r validation_F1`, respectively.
+
+One of the limitations of this project is its generalization. Although 30.7% of donors in the `training` data set donated again in March 2007, which may be considered good by blood donation standards, the number of `n`'s are significantly reduced when split out by conditions. Further, these models may or may not be extrapolated to blood transfusion centres elsewhere; depending on the demographics of the blood donors in this data set and logistics specific to the BTSC in Hsinchu.
+
+Future work in modelling this data could utilize techniques such as principal component analysis to improve the accuracy and F1 score of the model. However, this may come at the cost of model interpretability.
+
+\newpage
+# References
+Irizarry, R. A. (2021, July 3). Introduction to Data Science. Rafalab.Github.Io. https://rafalab.github.io/dsbook/
+
+Kuhn, M. (2021). caret: Classification and Regression Training. R package version 6.0-88. https://CRAN.R-project.org/package=caret
+
+R Core Team (2020). R: A language and environment for statistical computing. R Foundation for Statistical Computing, Vienna, Austria. URL https://www.R-project.org/.
+
+Wickham, H., Averick, M., Bryan, J., Chang, W., McGowan, L. D. A., François, R., ... & Yutani, H. (2019). Welcome to the Tidyverse. Journal of open source software, 4(43), 1686.
+
+Yeh, I., Yang, K., Ting, T. (2008, October 3). UCI Machine Learning Repository: Blood Transfusion Service Center Data Set. University of California, Irvine Machine Learning Repository. https://archive.ics.uci.edu/ml/datasets/Blood+Transfusion+Service+Center
